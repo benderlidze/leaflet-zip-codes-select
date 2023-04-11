@@ -15,7 +15,6 @@
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
         integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-
     <script src="https://unpkg.com/@turf/turf"></script>
 
     <style>
@@ -40,17 +39,31 @@
             flex: 1;
         }
 
+        .total {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
         button {
             width: 100%;
             padding: 10px;
             border-radius: 3px;
             border: none;
             margin: 10px 0;
+            cursor: pointer;
+            user-select: none;
+            text-align: center;
         }
 
         .red {
             background-color: red;
             color: white;
+        }
+
+        .darkblue {
+            background-color: #3d4186;
+            color: white;
+            justify-content: center;
         }
 
         h2 {
@@ -141,6 +154,9 @@
                 <input type="text" id="zip-input" placeholder="zip code">
             </div>
             <button class="button red">Search</button>
+
+            <div class="total" id="zip-total"></div>
+            <button id="copy-codes" class="button darkblue">Copy ZIP codes to Clipboard</button>
         </div>
         <div class="right">
             <div id="map" style="width: 100%; height: 100vh;"></div>
@@ -150,8 +166,18 @@
 
     <script>
         const zipInput = document.getElementById("zip-input")
+        const zipTotal = document.getElementById("zip-total")
+        const copyZipToClipboard = document.getElementById("copy-codes")
+        copyZipToClipboard.style.display = 'none';
+
         const zips = []
-        const main = {}
+        const main = {
+            selectedZips: [],
+            centerPopup: null,
+            circlePopups: [],
+            geojson: null
+        }
+
         const map = L.map('map').setView([38.94232097947902, -97.93212890625], 5);
         const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -168,10 +194,13 @@
             autocomplete(zipInput, zips.map(z => z.zip), (zipCode) => {
                 console.log('zipCode', zipCode);
 
-                //clear map
+                //clear prev data
                 main.geojson && main.geojson.remove();
                 main.centerPopup && main.centerPopup.remove();
                 main.circlePopups && main.circlePopups.forEach(p => p.remove());
+                main.selectedZips = [];
+                zipTotal.innerHTML = '';
+
 
                 const { lat, lng, zip } = zips.find(z => z.zip === zipCode);
                 const centerPopup = L.popup({
@@ -190,15 +219,20 @@
                 const circle = turf.circle(center, radius, options);
                 const geojson = L.geoJSON(circle).addTo(map);
 
+                map.flyToBounds(geojson.getBounds());
 
-                map.flyTo([lat, lng], 10);
 
+                //map.flyTo([lat, lng], 10);
+
+                const selectedZips = []
                 const point = turf.point([lng, lat]);
                 const buffered = turf.buffer(point, radius, { units: 'miles' });
                 const circlePopups = zips.filter(c => {
                     const point = turf.point([c.lng, c.lat]);
                     return turf.booleanPointInPolygon(point, buffered) && c.zip !== zipCode;
                 }).map(d => {
+                    selectedZips.push(d.zip)
+                    zipTotal.innerHTML += `<div class="zip-item">${d.zip}</zip>`
                     return L.popup({
                         closeOnClick: false,
                         autoClose: false,
@@ -212,8 +246,16 @@
                 main.geojson = geojson;
                 main.centerPopup = centerPopup;
                 main.circlePopups = circlePopups;
+                main.selectedZips = selectedZips
+                copyZipToClipboard.style.display = 'flex';
             });
         })
+
+        copyZipToClipboard.addEventListener('click', () => {
+            const zipCodesString = main.selectedZips.join(', ');
+            navigator.clipboard.writeText(zipCodesString);
+        })
+
 
         function autocomplete(inp, arr, callback) {
             /*the autocomplete function takes two arguments,
