@@ -33,10 +33,12 @@
         .left {
             width: 300px;
             padding: 10px;
+
         }
 
         .right {
             flex: 1;
+            position: relative;
         }
 
         .total {
@@ -170,6 +172,21 @@
         .label {
             font-size: 12px;
         }
+
+        #loading {
+            position: absolute;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            display: none;
+        }
     </style>
 </head>
 
@@ -200,6 +217,7 @@
         </div>
         <div class="right">
             <div id="map" style="width: 100%; height: 100vh;"></div>
+            <div id="loading">Loading...</div>
         </div>
     </div>
 
@@ -207,6 +225,7 @@
     <script>
         const info = ""
         const infoDiv = document.getElementById("info")
+        const loadingDiv = document.getElementById("loading")
         const radiusValues = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30]
         const radiusInput = document.getElementById("radius-input")
         const zipInput = document.getElementById("zip-input")
@@ -246,20 +265,32 @@
             autocomplete(zipInput, zips.map(z => z.zip), getZipCodesByRadius);
         })
 
-        searchButton.addEventListener('click', getZipCodesByRadius)
-        //radiusInput.addEventListener('change', getZipCodesByRadius)
+        searchButton.addEventListener('click', () => {
+            getZipCodesByRadius()
+        })
 
         copyZipToClipboard.addEventListener('click', () => {
             const zipCodesString = main.selectedZips.join(', ');
             navigator.clipboard.writeText(zipCodesString);
         })
+
+        setInfo("Please fill in the ZIP code field<br> to see the results.", "info")
+
+        function setLoading(loading) {
+            loadingDiv.style.display = loading ? 'flex' : 'none';
+        }
+
         function setInfo(text, type = "error") {
             infoDiv.style.color = type === "error" ? "red" : "black";
             infoDiv.innerHTML = text
         }
 
-        function getZipCodesByRadius() {
+
+        async function getZipCodesByRadius() {
             setInfo('')
+            setLoading(true)
+
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             const zipCode = zipInput.value;
             if (!zipCode || zipCode.length !== 5) {
@@ -299,7 +330,6 @@
 
             map.flyToBounds(geojson.getBounds());
 
-            //map.flyTo([lat, lng], 10);
             const locations = new Set()
             const selectedZips = []
             const point = turf.point([lng, lat]);
@@ -327,9 +357,11 @@
                 })
                     .setLatLng([d.lat, d.lng])
                     .setContent(d.zip)
-                    .addTo(map);
+                //.addTo(map);
                 circlePopups.push(popup)
             })
+            layerGroup = L.layerGroup(circlePopups);
+
 
             setInfo(`${filtered.length} Total ZIP Codes within ${radius} miles of ${zipCode}`, "info");
 
@@ -338,6 +370,15 @@
             main.circlePopups = circlePopups;
             main.selectedZips = selectedZips
             copyZipToClipboard.style.display = 'flex';
+
+            console.log('2', 2);
+
+            map.once('moveend zoomend', () => {
+                layerGroup.addTo(map);
+                setLoading(false)
+            })
+
+
         }
 
         function autocomplete(inp, arr, callback) {
