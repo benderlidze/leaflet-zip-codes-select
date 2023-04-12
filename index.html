@@ -40,6 +40,7 @@
         }
 
         .total {
+            margin-top: 10px;
             max-height: 300px;
             overflow-y: auto;
         }
@@ -84,6 +85,7 @@
             background-color: #f1f1f1;
             padding: 10px;
             font-size: 16px;
+            min-width: 90px;
         }
 
         input {
@@ -154,32 +156,44 @@
             display: flex;
             flex-direction: row;
             align-items: center;
+            margin-top: 10px;
+        }
+
+        .info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .label {
+            font-size: 12px;
         }
     </style>
-
-
 </head>
 
 <body>
-
     <div class="container">
         <div class="left">
             <h2>Find ZIP codes</h2>
 
             <div class="input-container">
                 <div>
-                    <!-- <input type="text" id="radius-input" placeholder="radius"> -->
+                    <div class="label">Distance (miles)</div>
                     <select name="radius" id="radius-input"></select>
                 </div>
                 <div style="padding:10px;">
                     around
                 </div>
                 <div class="autocomplete">
+                    <div class="label">ZIP Code:</div>
                     <input type="text" id="zip-input" placeholder="zip code">
                 </div>
             </div>
 
             <button class="button red" id="search-button">Search</button>
+            <div class="info" id="info"></div>
 
             <div class="total" id="zip-total"></div>
             <button id="copy-codes" class="button darkblue">Copy ZIP codes to Clipboard</button>
@@ -191,6 +205,8 @@
 
 
     <script>
+        const info = ""
+        const infoDiv = document.getElementById("info")
         const radiusValues = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30]
         const radiusInput = document.getElementById("radius-input")
         const zipInput = document.getElementById("zip-input")
@@ -227,7 +243,6 @@
                 return { lat: +lat, lng: +lng, zip }
             })
             zips.push(...codes)
-
             autocomplete(zipInput, zips.map(z => z.zip), getZipCodesByRadius);
         })
 
@@ -238,16 +253,19 @@
             const zipCodesString = main.selectedZips.join(', ');
             navigator.clipboard.writeText(zipCodesString);
         })
+        function setInfo(text, type = "error") {
+            infoDiv.style.color = type === "error" ? "red" : "black";
+            infoDiv.innerHTML = text
+        }
 
         function getZipCodesByRadius() {
+            setInfo('')
 
             const zipCode = zipInput.value;
-
             if (!zipCode || zipCode.length !== 5) {
-                alert('Please enter a valid zip code');
+                setInfo('Please enter a valid zip code');
                 return;
             }
-
 
             //clear prev data
             main.geojson && main.geojson.remove();
@@ -256,7 +274,13 @@
             main.selectedZips = [];
             zipTotal.innerHTML = '';
 
-            const { lat, lng, zip } = zips.find(z => z.zip === zipCode);
+            const currentZip = zips.find(z => z.zip === zipCode)
+            if (!currentZip) {
+                setInfo('The code you have entered does not exist. <br>Please check the code and try again. ');
+                return;
+            }
+
+            const { lat, lng, zip } = currentZip
             const centerPopup = L.popup({
                 className: 'popupCustom',
                 closeOnClick: false,
@@ -282,29 +306,32 @@
             const buffered = turf.buffer(point, radius, { units: 'miles' });
             const circlePopups = []
 
-            zips.filter(c => {
+            const filtered = zips.filter(c => {
                 const point = turf.point([c.lng, c.lat]);
                 return turf.booleanPointInPolygon(point, buffered) && c.zip !== zipCode;
             })
-                .map(d => {
-                    selectedZips.push(d.zip)
-                    zipTotal.innerHTML += `<div class="zip-item">${d.zip}</zip>`
 
-                    //do not opne popup on same location 
-                    if (locations.has(d.lat + d.lng)) return;
+            filtered.map(d => {
+                selectedZips.push(d.zip)
+                zipTotal.innerHTML += `<div class="zip-item">${d.zip}</zip>`
 
-                    locations.add(d.lat + d.lng)
+                //do not open the pop-up window in the same place, 
+                //because it slows down the rendering of the map (too many popups)
+                if (locations.has(d.lat + d.lng)) return;
+                locations.add(d.lat + d.lng)
 
-                    const popup = L.popup({
-                        closeOnClick: false,
-                        autoClose: false,
-                        closeButton: false,
-                    })
-                        .setLatLng([d.lat, d.lng])
-                        .setContent(d.zip)
-                        .addTo(map);
-                    circlePopups.push(popup)
+                const popup = L.popup({
+                    closeOnClick: false,
+                    autoClose: false,
+                    closeButton: false,
                 })
+                    .setLatLng([d.lat, d.lng])
+                    .setContent(d.zip)
+                    .addTo(map);
+                circlePopups.push(popup)
+            })
+
+            setInfo(`${filtered.length} Total ZIP Codes within ${radius} miles of ${zipCode}`, "info");
 
             main.geojson = geojson;
             main.centerPopup = centerPopup;
