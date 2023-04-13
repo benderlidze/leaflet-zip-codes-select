@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/@turf/turf"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .my-div-icon {
+            background-color: white;
+            border-radius: 3px;
+            padding: 3px 20px;
+            width: 35px !important;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            justify-content: center;
+        }
+
+        .my-div-icon::after {
+            content: "";
+            position: absolute;
+            bottom: -9px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid white;
+            filter: drop-shadow(0px 3px 2px rgba(0, 0, 0, 0.3));
+        }
+
+        .red {
+            background-color: red;
+            color: white;
+            border-radius: 3px;
+            padding: 3px 20px;
+            width: 35px !important;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            justify-content: center;
+        }
+
+        .red::after {
+            content: "";
+            position: absolute;
+            bottom: -9px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid rgb(255, 0, 0);
+            filter: drop-shadow(0px 3px 2px rgba(0, 0, 0, 0.3));
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-12 col-md-6 p-5">
+                <h2>Find ZIP codes</h2>
+
+                <div class="row">
+                    <div class="col-5">
+                        <label for="inputCity" class="form-label m-0">Distance (miles):</label>
+                        <select id="radius-input" class="form-select" aria-label="Default select example">
+                        </select>
+                    </div>
+                    <div class="col-2 align-self-end pb-2">
+                        around
+                    </div>
+                    <div class="col-5">
+                        <label for="inputCity" class="form-label m-0">ZIP code:</label>
+                        <input type="number" id="zip-input" class="form-control" placeholder="Zip code" required
+                            aria-label="Last name">
+                    </div>
+                </div>
+
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <div class="d-grid gap-2">
+                            <button type="button" id="search-button" class="btn btn-danger">Search</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-2">
+                    <div class="col-12 text-center">
+                        <div id="info"></div>
+                    </div>
+                </div>
+
+                <div class="overflow-auto p-2 rounded-2" style="max-height:200px; background-color: #f7f9fb;"
+                    id="zip-total"></div>
+
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <div class="d-grid gap-2">
+                            <button type="button" id="copy-codes" class="btn btn-primary">Copy ZIP codes to
+                                Clipboard</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="col">
+                <div id="map" style="width: 100%; height: 100vh;"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const info = ""
+        const infoDiv = document.getElementById("info")
+        const loadingDiv = document.getElementById("loading")
+        const radiusValues = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30]
+        const radiusInput = document.getElementById("radius-input")
+        const zipInput = document.getElementById("zip-input")
+
+        const zipTotal = document.getElementById("zip-total")
+        zipTotal.style.display = 'none';
+
+        const searchButton = document.getElementById("search-button")
+        const copyZipToClipboard = document.getElementById("copy-codes")
+        copyZipToClipboard.style.display = 'none';
+
+        const zips = []
+        const main = {
+            selectedZips: [],
+            centerPopup: null,
+            circlePopups: [],
+            geojson: null
+        }
+
+        var map = new maplibregl.Map({
+            container: 'map', // container id
+            style: {
+                'version': 8,
+                'sources': {
+                    'raster-tiles': {
+                        'type': 'raster',
+                        'tiles': [
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+                        ],
+                        'tileSize': 256,
+                        'attribution':
+                            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                    }
+                },
+                'layers': [
+                    {
+                        'id': 'simple-tiles',
+                        'type': 'raster',
+                        'source': 'raster-tiles',
+                        'minzoom': 0,
+                        'maxzoom': 22
+                    }
+                ]
+            },
+            center: [-74.5, 40], // starting position
+            zoom: 2 // starting zoom
+        });
+
+        map.on('load', function () {
+            map.addSource('circle', {
+                'type': 'geojson',
+                'data': turf.featureCollection([])
+            });
+            map.addLayer({
+                'id': 'maine',
+                'type': 'fill',
+                'source': 'circle',
+                'layout': {},
+                'paint': {
+                    'fill-color': '#0b5ed7',
+                    'fill-opacity': 0.4
+                }
+            });
+        });
+
+
+        //feel radiusInput with values from radiusValues
+        radiusValues.forEach(r => {
+            const option = document.createElement('option');
+            option.value = r;
+            option.innerHTML = r;
+            radiusInput.appendChild(option);
+        })
+
+        d3.csv("zips.csv").then(csv => {
+            console.log('csv', csv);
+            const codes = csv.map(d => {
+                const { lat, lng, zip } = d;
+                return { lat: +lat, lng: +lng, zip }
+            })
+            zips.push(...codes)
+            // autocomplete(zipInput, zips.map(z => z.zip), getZipCodesByRadius);
+        })
+
+        searchButton.addEventListener('click', () => {
+            getZipCodesByRadius()
+        })
+
+        copyZipToClipboard.addEventListener('click', () => {
+            const zipCodesString = main.selectedZips.join(', ');
+            navigator.clipboard.writeText(zipCodesString);
+        })
+
+        setInfo("Please fill in the ZIP code field<br> to see the results.", "info")
+
+        function setLoading(loading) {
+            loadingDiv.style.display = loading ? 'flex' : 'none';
+        }
+
+        function setInfo(text, type = "error") {
+            infoDiv.style.color = type === "error" ? "red" : "black";
+            infoDiv.innerHTML = text
+        }
+
+
+        async function getZipCodesByRadius() {
+            setInfo('')
+
+            const zipCode = zipInput.value;
+            if (!zipCode || zipCode.length !== 5) {
+                setInfo('Please enter a valid zip code');
+                return;
+            }
+
+            //clear prev data
+            main.geojson && main.geojson.remove();
+            main.centerPopup && main.centerPopup.remove();
+            main.circlePopups && main.circlePopups.forEach(p => p.remove());
+            main.selectedZips = [];
+            zipTotal.innerHTML = '';
+
+            const currentZip = zips.find(z => z.zip === zipCode)
+            if (!currentZip) {
+                setInfo('The code you have entered does not exist. <br>Please check the code and try again. ');
+                return;
+            }
+
+            const { lat, lng, zip } = currentZip
+
+            const radius = +radiusInput.value;
+            const center = [lng, lat];
+            const options = { steps: 50, units: 'miles', properties: { foo: 'bar' } };
+            const circle = turf.circle(center, radius, options);
+            map.getSource("circle").setData(circle)
+
+            var bbox = turf.bbox(circle);
+            map.fitBounds(bbox, { padding: 20, animate: false, duration: 0 });
+
+            const locations = new Set()
+            const selectedZips = []
+            const point = turf.point([lng, lat]);
+            const buffered = turf.buffer(point, radius, { units: 'miles' });
+            const circlePopups = []
+
+            const filtered = zips.filter(c => {
+                const point = turf.point([c.lng, c.lat]);
+                return turf.booleanPointInPolygon(point, buffered) && c.zip !== zipCode;
+            })
+
+            var el = document.createElement('div');
+            el.className = 'my-div-icon red';
+            el.innerHTML = zip
+            const centerPopup = new maplibregl.Marker(el)
+                .setLngLat([lng, lat])
+                .addTo(map);
+
+
+            filtered.map(d => {
+                selectedZips.push(d.zip)
+                zipTotal.innerHTML += `<div class="zip-item">${d.zip}</zip>`
+
+                //do not open the pop-up window in the same place, 
+                //because it slows down the rendering of the map (too many popups)
+                if (locations.has(d.lat + d.lng)) return;
+                locations.add(d.lat + d.lng)
+
+                var el = document.createElement('div');
+                el.className = 'my-div-icon';
+                el.innerHTML = d.zip
+                const marker = new maplibregl.Marker(el)
+                    .setLngLat([d.lng, d.lat])
+                    .addTo(map);
+                circlePopups.push(marker)
+            })
+
+
+            setInfo(`${filtered.length} Total ZIP Codes within ${radius} miles of ${zipCode}`, "info");
+            //main.geojson = geojson;
+            main.centerPopup = centerPopup;
+            main.circlePopups = circlePopups;
+            main.selectedZips = selectedZips
+            copyZipToClipboard.style.display = 'block';
+            zipTotal.style.display = 'block';
+        }
+
+    </script>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4"
+        crossorigin="anonymous"></script>
+</body>
+
+</html>

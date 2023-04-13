@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Quick Start - Leaflet</title>
+
+    <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+        integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+        integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/@turf/turf"></script>
+
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .left {
+            width: 300px;
+            padding: 10px;
+
+        }
+
+        .right {
+            flex: 1;
+            position: relative;
+        }
+
+        .total {
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 3px;
+            border: none;
+            margin: 10px 0;
+            cursor: pointer;
+            user-select: none;
+            text-align: center;
+        }
+
+        .red {
+            background-color: red;
+            color: white;
+        }
+
+        .darkblue {
+            background-color: #3d4186;
+            color: white;
+            justify-content: center;
+        }
+
+        h2 {
+            margin: 0;
+            color: #3e4479;
+        }
+
+
+        /*the container must be positioned relative:*/
+        .autocomplete {
+            position: relative;
+            display: inline-block;
+        }
+
+        select {
+            text-indent: 0px;
+            border: 1px solid transparent;
+            background-color: #f1f1f1;
+            padding: 10px;
+            font-size: 16px;
+            min-width: 90px;
+        }
+
+        input {
+            border: 1px solid transparent;
+            background-color: #f1f1f1;
+            padding: 10px;
+            font-size: 16px;
+
+        }
+
+        input[type=text] {
+            background-color: #f1f1f1;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input[type=submit] {
+            background-color: DodgerBlue;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d4d4d4;
+            border-bottom: none;
+            border-top: none;
+            z-index: 99;
+            /*position the autocomplete items to be the same width as the container:*/
+            top: 100%;
+            left: 0;
+            right: 0;
+        }
+
+        .autocomplete-items div {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #fff;
+            border-bottom: 1px solid #d4d4d4;
+        }
+
+        /*when hovering an item:*/
+        .autocomplete-items div:hover {
+            background-color: #e9e9e9;
+        }
+
+        /*when navigating through the items using the arrow keys:*/
+        .autocomplete-active {
+            background-color: DodgerBlue !important;
+            color: #ffffff;
+        }
+
+        .leaflet-popup-content {
+            text-align: center !important;
+            user-select: none;
+        }
+
+        .popupCustom>.leaflet-popup-content-wrapper {
+            background-color: red !important;
+            color: white;
+        }
+
+        .popupCustom>.leaflet-popup-tip-container>.leaflet-popup-tip {
+            background-color: red !important;
+        }
+
+        .input-container {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .label {
+            font-size: 12px;
+        }
+
+        #loading {
+            position: absolute;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            display: none;
+        }
+
+        .leaflet-popup-content {
+            margin: 6px 15px 4px 10px;
+            line-height: 1.3;
+            font-size: 13px;
+            font-size: 1.08333em;
+            min-height: 1px;
+            width: 30px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="left">
+            <h2>Find ZIP codes</h2>
+
+            <div class="input-container">
+                <div>
+                    <div class="label">Distance (miles)</div>
+                    <select name="radius" id="radius-input"></select>
+                </div>
+                <div style="padding:10px;">
+                    around
+                </div>
+                <div class="autocomplete">
+                    <div class="label">ZIP Code:</div>
+                    <input type="text" id="zip-input" placeholder="zip code">
+                </div>
+            </div>
+
+            <button class="button red" id="search-button">Search</button>
+            <div class="info" id="info"></div>
+
+            <div class="total" id="zip-total"></div>
+            <button id="copy-codes" class="button darkblue">Copy ZIP codes to Clipboard</button>
+        </div>
+        <div class="right">
+            <div id="map" style="width: 100%; height: 100vh;"></div>
+            <div id="loading">Loading...</div>
+        </div>
+    </div>
+
+
+    <script>
+        const info = ""
+        const infoDiv = document.getElementById("info")
+        const loadingDiv = document.getElementById("loading")
+        const radiusValues = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30]
+        const radiusInput = document.getElementById("radius-input")
+        const zipInput = document.getElementById("zip-input")
+        const zipTotal = document.getElementById("zip-total")
+        const searchButton = document.getElementById("search-button")
+        const copyZipToClipboard = document.getElementById("copy-codes")
+        copyZipToClipboard.style.display = 'none';
+
+        const zips = []
+        const main = {
+            selectedZips: [],
+            centerPopup: null,
+            circlePopups: [],
+            geojson: null
+        }
+
+        const map = L.map('map').setView([38.94232097947902, -97.93212890625], 5);
+        const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        //feel radiusInput with values from radiusValues
+        radiusValues.forEach(r => {
+            const option = document.createElement('option');
+            option.value = r;
+            option.innerHTML = r;
+            radiusInput.appendChild(option);
+        })
+
+        d3.csv("zips.csv").then(csv => {
+            console.log('csv', csv);
+            const codes = csv.map(d => {
+                const { lat, lng, zip } = d;
+                return { lat: +lat, lng: +lng, zip }
+            })
+            zips.push(...codes)
+            autocomplete(zipInput, zips.map(z => z.zip), getZipCodesByRadius);
+        })
+
+        searchButton.addEventListener('click', () => {
+            getZipCodesByRadius()
+        })
+
+        copyZipToClipboard.addEventListener('click', () => {
+            const zipCodesString = main.selectedZips.join(', ');
+            navigator.clipboard.writeText(zipCodesString);
+        })
+
+        setInfo("Please fill in the ZIP code field<br> to see the results.", "info")
+
+        function setLoading(loading) {
+            loadingDiv.style.display = loading ? 'flex' : 'none';
+        }
+
+        function setInfo(text, type = "error") {
+            infoDiv.style.color = type === "error" ? "red" : "black";
+            infoDiv.innerHTML = text
+        }
+
+
+        async function getZipCodesByRadius() {
+            setInfo('')
+            setLoading(true)
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const zipCode = zipInput.value;
+            if (!zipCode || zipCode.length !== 5) {
+                setInfo('Please enter a valid zip code');
+                return;
+            }
+
+            //clear prev data
+            main.geojson && main.geojson.remove();
+            main.centerPopup && main.centerPopup.remove();
+            main.circlePopups && main.circlePopups.forEach(p => p.remove());
+            main.selectedZips = [];
+            zipTotal.innerHTML = '';
+
+            const currentZip = zips.find(z => z.zip === zipCode)
+            if (!currentZip) {
+                setInfo('The code you have entered does not exist. <br>Please check the code and try again. ');
+                return;
+            }
+
+            const { lat, lng, zip } = currentZip
+            const centerPopup = L.popup({
+                className: 'popupCustom',
+                closeOnClick: false,
+                autoClose: false,
+                closeButton: false,
+            })
+                .setLatLng([lat, lng])
+                .setContent(zip)
+                .openOn(map);
+
+            const radius = +radiusInput.value;
+            const center = [lng, lat];
+            const options = { steps: 50, units: 'miles', properties: { foo: 'bar' } };
+            const circle = turf.circle(center, radius, options);
+            const geojson = L.geoJSON(circle).addTo(map);
+
+            map.fitBounds(geojson.getBounds());
+
+            const locations = new Set()
+            const selectedZips = []
+            const point = turf.point([lng, lat]);
+            const buffered = turf.buffer(point, radius, { units: 'miles' });
+            const circlePopups = []
+
+            const filtered = zips.filter(c => {
+                const point = turf.point([c.lng, c.lat]);
+                return turf.booleanPointInPolygon(point, buffered) && c.zip !== zipCode;
+            })
+
+            filtered.map(d => {
+                selectedZips.push(d.zip)
+                zipTotal.innerHTML += `<div class="zip-item">${d.zip}</zip>`
+
+                //do not open the pop-up window in the same place, 
+                //because it slows down the rendering of the map (too many popups)
+                if (locations.has(d.lat + d.lng)) return;
+                locations.add(d.lat + d.lng)
+
+                const popup = L.popup({
+                    closeOnClick: false,
+                    autoClose: false,
+                    closeButton: false,
+                })
+                    .setLatLng([d.lat, d.lng])
+                    .setContent(d.zip)
+                //.addTo(map);
+                circlePopups.push(popup)
+            })
+            layerGroup = L.layerGroup(circlePopups);
+
+            setInfo(`${filtered.length} Total ZIP Codes within ${radius} miles of ${zipCode}`, "info");
+
+            main.geojson = geojson;
+            main.centerPopup = centerPopup;
+            main.circlePopups = circlePopups;
+            main.selectedZips = selectedZips
+            copyZipToClipboard.style.display = 'flex';
+
+
+            layerGroup.addTo(map);
+            setLoading(false)
+
+
+        }
+
+        function autocomplete(inp, arr, callback) {
+            /*the autocomplete function takes two arguments,
+            the text field element and an array of possible autocompleted values:*/
+            var currentFocus;
+            /*execute a function when someone writes in the text field:*/
+            inp.addEventListener("input", function (e) {
+
+                if (inp.value.length <= 3) return;
+                var a, b, i, val = this.value;
+                /*close any already open lists of autocompleted values*/
+                closeAllLists();
+                if (!val) { return false; }
+                currentFocus = -1;
+                /*create a DIV element that will contain the items (values):*/
+                a = document.createElement("DIV");
+                a.setAttribute("id", this.id + "autocomplete-list");
+                a.setAttribute("class", "autocomplete-items");
+                /*append the DIV element as a child of the autocomplete container:*/
+                this.parentNode.appendChild(a);
+                /*for each item in the array...*/
+                for (i = 0; i < arr.length; i++) {
+                    /*check if the item starts with the same letters as the text field value:*/
+                    if (arr[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
+                        /*create a DIV element for each matching element:*/
+                        b = document.createElement("DIV");
+                        /*make the matching letters bold:*/
+                        b.innerHTML = "<strong>" + arr[i].substr(0, val.length) + "</strong>";
+                        b.innerHTML += arr[i].substr(val.length);
+                        /*insert a input field that will hold the current array item's value:*/
+                        b.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
+                        /*execute a function when someone clicks on the item value (DIV element):*/
+                        b.addEventListener("click", function (e) {
+                            /*insert the value for the autocomplete text field:*/
+                            inp.value = this.getElementsByTagName("input")[0].value;
+                            /*close the list of autocompleted values,
+                            (or any other open lists of autocompleted values:*/
+                            closeAllLists();
+                            callback(inp.value);
+                        });
+                        a.appendChild(b);
+                    }
+                }
+            });
+            /*execute a function presses a key on the keyboard:*/
+            inp.addEventListener("keydown", function (e) {
+                var x = document.getElementById(this.id + "autocomplete-list");
+                if (x) x = x.getElementsByTagName("div");
+                if (e.keyCode == 40) {
+                    /*If the arrow DOWN key is pressed,
+                    increase the currentFocus variable:*/
+                    currentFocus++;
+                    /*and and make the current item more visible:*/
+                    addActive(x);
+                } else if (e.keyCode == 38) { //up
+                    /*If the arrow UP key is pressed,
+                    decrease the currentFocus variable:*/
+                    currentFocus--;
+                    /*and and make the current item more visible:*/
+                    addActive(x);
+                } else if (e.keyCode == 13) {
+                    /*If the ENTER key is pressed, prevent the form from being submitted,*/
+                    e.preventDefault();
+                    if (currentFocus > -1) {
+                        /*and simulate a click on the "active" item:*/
+                        if (x) x[currentFocus].click();
+                    }
+                }
+            });
+            function addActive(x) {
+                /*a function to classify an item as "active":*/
+                if (!x) return false;
+                /*start by removing the "active" class on all items:*/
+                removeActive(x);
+                if (currentFocus >= x.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = (x.length - 1);
+                /*add class "autocomplete-active":*/
+                x[currentFocus].classList.add("autocomplete-active");
+            }
+            function removeActive(x) {
+                /*a function to remove the "active" class from all autocomplete items:*/
+                for (var i = 0; i < x.length; i++) {
+                    x[i].classList.remove("autocomplete-active");
+                }
+            }
+            function closeAllLists(elmnt) {
+                /*close all autocomplete lists in the document,
+                except the one passed as an argument:*/
+                var x = document.getElementsByClassName("autocomplete-items");
+                for (var i = 0; i < x.length; i++) {
+                    if (elmnt != x[i] && elmnt != inp) {
+                        x[i].parentNode.removeChild(x[i]);
+                    }
+                }
+            }
+            /*execute a function when someone clicks in the document:*/
+            document.addEventListener("click", function (e) {
+                closeAllLists(e.target);
+            });
+        }
+
+
+    </script>
+
+
+
+</body>
+
+</html>
